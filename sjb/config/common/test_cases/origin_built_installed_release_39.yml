@@ -1,9 +1,26 @@
 ---
-parent: 'common/test_cases/origin_release_with_ecosystem_39.yml'
+parent: 'common/test_cases/origin_release_with_ecosystem.yml'
 extensions:
   sync:
     - "openshift,aos-cd-jobs=master"
   actions:
+    - type: "script"
+      title: "enable ansible 2.6 repo"
+      timeout: 300
+      script: |-
+        sudo touch /etc/yum.repos.d/rhel-7-server-ansible-2.6-rpms.repo
+        sudo chmod a+rw /etc/yum.repos.d/rhel-7-server-ansible-2.6-rpms.repo
+        cat <<REPO >/etc/yum.repos.d/rhel-7-server-ansible-2.6-rpms.repo
+        [rhel-7-server-ansible-2.6-rpms]
+        name=rhel-7-server-ansible-2.6-rpms
+        baseurl=https://mirror.openshift.com/enterprise/rhel/rhel-7-server-ansible-2.6-rpms/
+        enabled=1
+        sslclientcert=/var/lib/yum/client-cert.pem
+        sslclientkey=/var/lib/yum/client-key.pem
+        sslverify=0
+        REPO
+
+        sudo yum repolist
     - type: "script"
       title: "install the openshift-ansible release"
       repository: "openshift-ansible"
@@ -45,6 +62,11 @@ extensions:
           sudo atomic pull --storage ostree docker:openshift/node:$( cat ./ORIGIN_TAG )
         fi
     - type: "script"
+      title: "tag openshift/origin for system containers"
+      repository: "aos-cd-jobs"
+      script: |-
+        sudo docker tag openshift/origin:$( cat ./ORIGIN_TAG ) openshift/origin:$( cat ./ORIGIN_TAG ).$(cat ORIGIN_PKG_VERSION | grep -Po "^\-\w\.\w\.(\w)" | cut -d '.' -f 3) || true
+    - type: "script"
       title: "origin prerequisites"
       repository: "aos-cd-jobs"
       script: |-
@@ -56,9 +78,8 @@ extensions:
         ansible-playbook -vv --become               \
                          --become-user root         \
                          --connection local         \
-                         --inventory sjb/inventory/ \
+                         --inventory sjb/inventory/release-39 \
                          -e openshift_deployment_type=origin  \
-                         -e openshift_image_tag="$( cat ./ORIGIN_RELEASE )" \
                          -e openshift_pkg_version="$( cat ./ORIGIN_PKG_VERSION )"               \
                          -e openshift_release="$( cat ./ORIGIN_RELEASE )"                       \
                          -e oreg_url='openshift/origin-${component}:'"$( cat ./ORIGIN_COMMIT )" \
@@ -80,7 +101,7 @@ extensions:
         ansible-playbook -vv --become               \
                          --become-user root         \
                          --connection local         \
-                         --inventory sjb/inventory/ \
+                         --inventory sjb/inventory/release-39 \
                          -e openshift_deployment_type=origin  \
                          -e openshift_pkg_version="$( cat ./ORIGIN_PKG_VERSION )"               \
                          -e openshift_release="$( cat ./ORIGIN_RELEASE )"                       \
@@ -100,7 +121,7 @@ extensions:
         ansible-playbook -vv --become               \
                          --become-user root         \
                          --connection local         \
-                         --inventory sjb/inventory/ \
+                         --inventory sjb/inventory/release-39 \
                          -e openshift_deployment_type=origin  \
                          -e etcd_data_dir="${ETCD_DATA_DIR}" \
                          -e openshift_master_default_subdomain="${local_ip}.nip.io"             \
@@ -119,7 +140,7 @@ extensions:
         sudo chmod a+x /etc/ /etc/origin/ /etc/origin/master/
         sudo chmod a+rw /etc/origin/master/admin.kubeconfig
     - type: "script"
-      title: "ensure built version of origin is installed"
+      title: "pull ostree images"
       timeout: 600
       repository: "origin"
       script: |-
